@@ -53,16 +53,16 @@ func FAbs(n, mod int) int {
 	return v //- (v / mod)
 }
 
-func min(a, b float64) float64 {
-	if a < b {
-		return a
-	}
-	return b
-}
-
 func max(a, b float64) float64 {
 	if a > b {
 		return a
 	}
 	return b
+}
+
+//Classic Error Fail for loading
+func check(err error) {
+	if err != nil {
+		panic(err)
+	}
 }
