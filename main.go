@@ -15,7 +15,7 @@ import (
 
 //Logging Information
 const (
-	logMem = true
+	logMem = false
 	logCpu = false
 )
 
