@@ -17,17 +17,18 @@ import (
 )
 
 const (
-	logMem = false
-	logCpu = true
+	logMem = true
+	logCpu = false
 )
 
 var (
-	WindowWidth  int = 800
-	WindowHeight int = 600
+	WindowWidth  int = 1400
+	WindowHeight int = 800
 )
 
 var redraw = true
 var frameCount = 0
+var totalMillis int
 
 const (
 	fontPath = "Font.ttf"
@@ -38,6 +39,11 @@ var HeightMap *image.Gray
 var ColorMap *image.RGBA
 
 var SkyCol = sdl.Color{R: 255, G: 0, B: 255, A: 255}
+
+//Multi Thread Rendering
+var renderWG sync.WaitGroup
+var NumThreads int = 14
+var renderControls []chan RenderStuff
 
 func main() {
 	//CPU Logging
@@ -51,7 +57,7 @@ func main() {
 	}
 
 	//Load Images
-	heightFile, err := os.Open("Images/Height.png")
+	heightFile, err := os.Open("Images/heightmap.png")
 	if err != nil {
 		panic(err)
 	}
@@ -66,7 +72,7 @@ func main() {
 	fmt.Printf("Loaded Height %dx%d\n", HeightMap.Rect.Dx(), HeightMap.Rect.Dy())
 
 	//Load Color Map
-	colorFile, err := os.Open("Images/Color.png")
+	colorFile, err := os.Open("Images/texture.png")
 	if err != nil {
 		panic(err)
 	}
@@ -138,12 +144,15 @@ func main() {
 
 	var keyMap = map[sdl.Keycode]bool{}
 	var vel Point
-	var renderWG sync.WaitGroup
-	var NumThreads int = 4
-	var renderControls []chan bool
+	renderControls = make([]chan RenderStuff, NumThreads) //sends reference to pixels to fill
+	var draw_unit = WindowWidth / NumThreads
 	for i := range renderControls {
-		renderControls[i] = make(chan bool)
+		renderControls[i] = make(chan RenderStuff)
+		go func(i int, currentChan chan RenderStuff) {
+			HandleRenderThread(i*draw_unit, (i+1)*draw_unit-1, currentChan, &cam)
+		}(i, renderControls[i])
 	}
+	fmt.Println("created render threads")
 	for running {
 
 		//Get Key Events
@@ -213,26 +222,39 @@ func main() {
 		}
 
 		//Redraw things
-		frameCount++
+		var millis uint32
 		if redraw {
+			frameCount++
 
+			//fmt.Println("redrawing")
 			surface.FillRect(&sdl.Rect{X: 0, Y: 0, W: int32(WindowWidth), H: int32(WindowHeight)}, SkyCol.Uint32())
 
 			pixels := surface.Pixels()
 			renderWG.Add(NumThreads)
-			DrawFrameChunk(0, WindowWidth, cam, WindowWidth, WindowHeight, pixels, surface)
-
+			for i := range renderControls {
+				renderControls[i] <- RenderStuff{
+					pix:           pixels,
+					surface:       surface,
+					screen_width:  WindowWidth,
+					screen_height: WindowHeight,
+					wg:            &renderWG,
+				}
+			}
+			//fmt.Println("waiting")
 			renderWG.Wait()
 			redraw = false
+			//fmt.Println("finished frame")
+			millis = sdl.GetTicks() - lastFrameTime
+			totalMillis += int(millis)
+
 		}
 
-		millis := sdl.GetTicks() - lastFrameTime
 		if millis > 16 {
 			fmt.Println("LongFrame", millis)
 			//runtime.ReadMemStats(&gcStats)
 		}
 
-		frameData := fmt.Sprintf("Frames: %d\n Delta %d\n %v \nMem: %vkb, NumGC: %d\n%v", frameCount, millis, cam, gcStats.Alloc/1000, gcStats.NumGC, keyMap)
+		frameData := fmt.Sprintf("Frames: %d\n Delta %d\nAvgDelta: %d\n %v \nMem: %vkb, NumGC: %d\n%v", frameCount, millis, totalMillis/frameCount, cam, gcStats.Alloc/1000, gcStats.NumGC, keyMap)
 		// Draw the text
 		DrawTextBoxToSurface(frameData, 0, 0, 300, dbcol, font, text, surface)
 		window.UpdateSurface()
@@ -257,12 +279,6 @@ func main() {
 }
 
 func sampleHeight(x, y float64) float64 {
-	//pts := []Point{{x + 1, y}, {x - 1, y}, {x, y + 1}, {x, y - 1}, {x, y}}
-	//var val float64 = 0
-	//for _, p := range pts {
-	//	val += float64(HeightMap.GrayAt((int(p.X)), (int(p.Y))).Y)
-	//}
-	//return val / 5
 	h := HeightMap.GrayAt(int(x), int(y))
 	return float64(h.Y)
 }
@@ -283,6 +299,31 @@ func DrawVerticalLine(x, y, height int, color sdl.Color, pixels []byte, surface 
 	}
 }
 
+type RenderStuff struct {
+	pix           []byte
+	surface       *sdl.Surface
+	screen_width  int
+	screen_height int
+	wg            *sync.WaitGroup
+}
+
+func HandleRenderThread(startX, endX int, comm chan RenderStuff, c *Camera) {
+	var currentRender RenderStuff
+	var pix []byte
+	var surf *sdl.Surface
+	var screen_height, screen_width int
+	fmt.Printf("start: %d\t end: %d\n", startX, endX)
+	for {
+		currentRender = <-comm
+		pix = currentRender.pix
+		surf = currentRender.surface
+		screen_height = currentRender.screen_height
+		screen_width = currentRender.screen_width
+		DrawFrameChunk(startX, endX, *c, screen_width, screen_height, pix, surf)
+		currentRender.wg.Done()
+	}
+}
+
 //https://github.com/s-macke/VoxelSpace
 func DrawFrameChunk(startX, endX int, c Camera, screen_width, screen_height int, pixels []byte, surface *sdl.Surface) {
 	//For some reason this works when negative but when positive the camera controller goes the wrong way
@@ -290,7 +331,7 @@ func DrawFrameChunk(startX, endX int, c Camera, screen_width, screen_height int,
 	var cosang = math.Cos(-c.Angle)
 
 	var hiddeny = make([]int, screen_width)
-	for i := 0; i < int(screen_width); i++ {
+	for i := startX; i <= endX; i++ {
 		hiddeny[i] = screen_height
 	}
 
@@ -298,7 +339,6 @@ func DrawFrameChunk(startX, endX int, c Camera, screen_width, screen_height int,
 	var plx, ply, prx, pry, dx, dy, invz float64
 	var sampleH, heightonscreen float64
 	var samplePoint Point
-	//var screen_height, screen_width = float64()
 	// Draw from front to back
 	for z := 1.0; z < c.Distance; z += deltaz {
 		// 90 degree field of view
@@ -311,8 +351,10 @@ func DrawFrameChunk(startX, endX int, c Camera, screen_width, screen_height int,
 		plx += c.Pos.X
 		ply += c.Pos.Y
 		invz = 1. / z * 240.
-
-		for i := startX; i < endX; i++ {
+		//Set up for multi thread rendering
+		plx += dx * float64(startX)
+		ply += dy * float64(startX)
+		for i := startX; i <= endX; i++ {
 			samplePoint = Point{math.Floor(plx), math.Floor(ply)}
 			sampleH = sampleHeight(samplePoint.X, samplePoint.Y)
 			heightonscreen = (c.Height-sampleH)*invz + c.Horizon
@@ -345,6 +387,7 @@ func DrawTextBoxToSurface(data string, x, y int32, w int, col sdl.Color, font *t
 
 }
 
+//Sets a pixel of an surface (referred to by the slice )
 func setPixel(x, y int32, col sdl.Color, pixels []byte, surface *sdl.Surface) {
 	if x >= surface.W || y >= surface.H {
 		return
