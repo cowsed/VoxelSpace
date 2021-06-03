@@ -1,6 +1,7 @@
 package main
 
 import (
+	"math"
 	"sync"
 
 	"github.com/veandco/go-sdl2/sdl"
@@ -41,6 +42,55 @@ func HandleRenderThread(startX, endX int, comm chan RenderStuff, c *Camera) {
 		screen_width = currentRender.screen_width
 		DrawFrameChunk(startX, endX, hiddeny, *c, screen_width, screen_height, pix, surf)
 		currentRender.wg.Done()
+	}
+}
+
+//https://github.com/s-macke/VoxelSpace
+func DrawFrameChunk(startX, endX int, hiddeny []int, c Camera, screen_width, screen_height int, pixels []byte, surface *sdl.Surface) {
+	//For some reason this works when negative but when positive the camera controller goes the wrong way
+	var sinang = math.Sin(-c.Angle)
+	var cosang = math.Cos(-c.Angle)
+
+	for i := startX; i <= endX; i++ {
+		hiddeny[i-startX] = screen_height
+	}
+
+	var deltaz = 1.0
+	var plx, ply, prx, pry, dx, dy, invz float64
+	var sampleH, heightonscreen float64
+	var samplePoint Point
+	// Draw from front to back
+	for z := 1.0; z < c.Distance; z += deltaz {
+		// 90 degree field of view
+		plx = -cosang*z - sinang*z
+		ply = sinang*z - cosang*z
+		prx = cosang*z - sinang*z
+		pry = -sinang*z - cosang*z
+		dx = (prx - plx) / float64(screen_width)
+		dy = (pry - ply) / float64(screen_width)
+		plx += c.Pos.X
+		ply += c.Pos.Y
+		invz = 1. / z * 240.
+		//Set up for multi thread rendering
+		plx += dx * float64(startX)
+		ply += dy * float64(startX)
+		for i := startX; i <= endX; i++ {
+			samplePoint = Point{math.Floor(plx), math.Floor(ply)}
+			sampleH = sampleHeight(samplePoint.X, samplePoint.Y)
+			heightonscreen = (c.Height-sampleH)*invz + c.Horizon
+			DrawVerticalLine(i, int(heightonscreen), hiddeny[i-startX], sampleColor(samplePoint.X, samplePoint.Y), pixels, surface)
+			if int(heightonscreen) < hiddeny[i-startX] {
+				hiddeny[i-startX] = int(heightonscreen)
+			}
+			plx += dx
+			ply += dy
+		}
+		deltaz += 0.005
+	}
+	//Fill the rest of the screen with skycol
+	for i := 0; i < len(hiddeny); i++ {
+		start := hiddeny[i]
+		DrawVerticalLine(i+startX, 0, start, SkyCol, pixels, surface)
 	}
 }
 

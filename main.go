@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"image"
-	"math"
 	"runtime"
 	"runtime/pprof"
 	"sync"
@@ -21,9 +20,11 @@ const (
 
 //Window Information
 var (
-	WindowWidth  int = 1920
-	WindowHeight int = 1080
+	WindowWidth  int = 960
+	WindowHeight int = 640
 	captureMouse     = false
+	keyMap           = map[sdl.Keycode]bool{} //Map of keys and if theyre pressed
+
 )
 
 //Rendering Information
@@ -34,13 +35,20 @@ var (
 	drawDB      = true
 )
 
-//Physics Information
+//Physics Controls
 var (
 	speed         float64 = 4.0
 	SpeedModifier float64 = 1 //Speed Modifier
 	playerHeight          = 15
 	doGravity             = false
 	GForce                = 0.04
+)
+
+//Physics Variables
+var (
+	VelZ     float64
+	InputVel Point //Velocity of camera
+
 )
 
 //Font Information
@@ -119,10 +127,6 @@ func main() {
 		Height:   100,
 		Horizon:  50,
 	}
-	var keyMap = map[sdl.Keycode]bool{} //Map of keys and if theyre pressed
-	var InputVel Point                  //Velocity of camera
-	//var Vel Point
-	var VelZ float64
 	renderControls = make([]chan RenderStuff, NumThreads) //sends reference to pixels to fill
 	for i := range renderControls {
 		renderControls[i] = make(chan RenderStuff)
@@ -145,13 +149,13 @@ func main() {
 					keyMap[keyCode] = true
 					switch keyCode {
 					case sdl.K_UP:
-						if UISelected > 0 {
-							UISelected--
+						UISelected--
+						if UISelected < 0 {
+							UISelected += len(UIItems)
 						}
 					case sdl.K_DOWN:
-						if UISelected < len(UIItems)-1 {
-							UISelected++
-						}
+						UISelected++
+						UISelected %= len(UIItems)
 					case sdl.K_LEFT:
 						UIItems[UISelected].PreviousItem()
 					case sdl.K_RIGHT:
@@ -239,7 +243,6 @@ func main() {
 		if redraw {
 			frameCount++
 			//Clear Screen
-			//surface.FillRect(&sdl.Rect{X: 0, Y: 0, W: int32(WindowWidth), H: int32(WindowHeight)}, 0xffffff)
 
 			//Send Rendering Information
 			pixels := surface.Pixels()
@@ -253,7 +256,7 @@ func main() {
 					wg:            &renderWG,
 				}
 			}
-			//Wait for all the rendering threades to finish
+			//Wait for all the rendering threads to finish
 			renderWG.Wait()
 			millis = sdl.GetTicks() - lastFrameTime
 			totalMillis += int(millis)
@@ -264,8 +267,10 @@ func main() {
 		}
 
 		// Draw DB text
+		past := time.Since(start)
+
 		if drawDB {
-			frameData := fmt.Sprintf("Frames: %d\n Delta %d\nAvgDelta: %d\n Modifier: %.3f\n%v \nMem: %vkb, NumGC: %d\n%v", frameCount, millis, totalMillis/frameCount, SpeedModifier, cam, gcStats.Alloc/1000, gcStats.NumGC, keyMap)
+			frameData := fmt.Sprintf("Frames: %d\n Delta %d\nAvgDelta: %d\nRenderTime: %dms\n%v \nMem: %vkb, NumGC: %d\n%v", frameCount, millis, totalMillis/frameCount, past.Milliseconds(), cam, gcStats.Alloc/1000, gcStats.NumGC, keyMap)
 			DrawTextBoxToSurface(frameData, 0, 0, 300, fontColor, font, text, surface)
 		}
 		ShowUI(surface)
@@ -275,7 +280,7 @@ func main() {
 
 		lastFrameTime = sdl.GetTicks()
 
-		past := time.Since(start)
+		past = time.Since(start)
 
 		time.Sleep(16*time.Millisecond - past)
 	}
@@ -284,55 +289,6 @@ func main() {
 	ProfileMemory()
 	//Finish CPU Profiling
 	pprof.StopCPUProfile()
-}
-
-//https://github.com/s-macke/VoxelSpace
-func DrawFrameChunk(startX, endX int, hiddeny []int, c Camera, screen_width, screen_height int, pixels []byte, surface *sdl.Surface) {
-	//For some reason this works when negative but when positive the camera controller goes the wrong way
-	var sinang = math.Sin(-c.Angle)
-	var cosang = math.Cos(-c.Angle)
-
-	for i := startX; i <= endX; i++ {
-		hiddeny[i-startX] = screen_height
-	}
-
-	var deltaz = 1.0
-	var plx, ply, prx, pry, dx, dy, invz float64
-	var sampleH, heightonscreen float64
-	var samplePoint Point
-	// Draw from front to back
-	for z := 1.0; z < c.Distance; z += deltaz {
-		// 90 degree field of view
-		plx = -cosang*z - sinang*z
-		ply = sinang*z - cosang*z
-		prx = cosang*z - sinang*z
-		pry = -sinang*z - cosang*z
-		dx = (prx - plx) / float64(screen_width)
-		dy = (pry - ply) / float64(screen_width)
-		plx += c.Pos.X
-		ply += c.Pos.Y
-		invz = 1. / z * 240.
-		//Set up for multi thread rendering
-		plx += dx * float64(startX)
-		ply += dy * float64(startX)
-		for i := startX; i <= endX; i++ {
-			samplePoint = Point{math.Floor(plx), math.Floor(ply)}
-			sampleH = sampleHeight(samplePoint.X, samplePoint.Y)
-			heightonscreen = (c.Height-sampleH)*invz + c.Horizon
-			DrawVerticalLine(i, int(heightonscreen), hiddeny[i-startX], sampleColor(samplePoint.X, samplePoint.Y), pixels, surface)
-			if int(heightonscreen) < hiddeny[i-startX] {
-				hiddeny[i-startX] = int(heightonscreen)
-			}
-			plx += dx
-			ply += dy
-		}
-		deltaz += 0.005
-	}
-	//Fill the rest of the screen with skycol
-	for i := 0; i < len(hiddeny); i++ {
-		start := hiddeny[i]
-		DrawVerticalLine(i+startX, 0, start, SkyCol, pixels, surface)
-	}
 }
 
 //Draws specified data to text Surface then to surface Surface

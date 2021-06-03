@@ -8,8 +8,8 @@ import (
 )
 
 var UISurf *sdl.Surface
-var UIPosX int32
-var UIPosY int32
+var UIPosX int = 400
+var UIPosY int
 var UISelected int
 
 var UIItems []UIItem = []UIItem{
@@ -19,6 +19,8 @@ var UIItems []UIItem = []UIItem{
 	&FloatEdit{"Speed", &SpeedModifier},
 	&IntEdit{"Player Height", &playerHeight},
 	&FloatEdit{"Terrain Scale", &terrainScale},
+	&IntEdit{"UI.x", &UIPosX},
+	&IntEdit{"UI.y", &UIPosY},
 }
 
 func RenderUI(font *ttf.Font) {
@@ -39,7 +41,8 @@ func RenderUI(font *ttf.Font) {
 
 func ShowUI(surface *sdl.Surface) {
 	uiRect := UISurf.ClipRect
-	uiRect.X += 400
+	uiRect.X += int32(UIPosX)
+	uiRect.Y += int32(UIPosY)
 	//Draw UI
 	surface.FillRect(&uiRect, 0xff000000)
 
