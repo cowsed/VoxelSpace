@@ -37,7 +37,7 @@ func ProfileMemory() {
 
 func LoadAll() {
 	//Load Images
-	heightFile, err := os.Open("Images/World.png")
+	heightFile, err := os.Open("Images/Height.png")
 	if err != nil {
 		panic(err)
 	}
@@ -52,7 +52,7 @@ func LoadAll() {
 	fmt.Printf("Loaded Height %dx%d\n", HeightMap.Rect.Dx(), HeightMap.Rect.Dy())
 
 	//Load Color Map
-	colorFile, err := os.Open("Images/World.png")
+	colorFile, err := os.Open("Images/Color.png")
 	if err != nil {
 		panic(err)
 	}

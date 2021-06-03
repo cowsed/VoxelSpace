@@ -3,7 +3,18 @@ package main
 import (
 	"fmt"
 	"math"
+
+	"github.com/veandco/go-sdl2/sdl"
 )
+
+func mixCol(A, B sdl.Color, mix float64) sdl.Color {
+	nc := sdl.Color{}
+	nc.R = uint8(float64(A.R)*mix + float64(B.R)*(1-mix))
+	nc.G = uint8(float64(A.G)*mix + float64(B.G)*(1-mix))
+	nc.B = uint8(float64(A.B)*mix + float64(B.B)*(1-mix))
+	nc.A = uint8(float64(A.A)*mix + float64(B.A)*(1-mix))
+	return nc
+}
 
 type Point struct {
 	X, Y float64

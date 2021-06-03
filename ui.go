@@ -19,6 +19,8 @@ var UIItems []UIItem = []UIItem{
 	&FloatEdit{"Speed", &SpeedModifier},
 	&IntEdit{"Player Height", &playerHeight},
 	&FloatEdit{"Terrain Scale", &terrainScale},
+	&FloatEdit{"Fog Amount", &FogAmt},
+
 	&IntEdit{"UI.x", &UIPosX},
 	&IntEdit{"UI.y", &UIPosY},
 }

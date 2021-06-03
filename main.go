@@ -41,7 +41,7 @@ var (
 	SpeedModifier float64 = 1 //Speed Modifier
 	playerHeight          = 15
 	doGravity             = false
-	GForce                = 0.04
+	GForce                = 0.06
 )
 
 //Physics Variables
@@ -63,7 +63,8 @@ var (
 	terrainScale float64 = 1
 	HeightMap    *image.Gray
 	ColorMap     *image.RGBA
-	SkyCol       = sdl.Color{R: 155, G: 255, B: 255, A: 255}
+	SkyCol               = sdl.Color{R: 110, G: 210, B: 255, A: 255}
+	FogAmt       float64 = .3
 )
 
 //Multi Thread Rendering Information
@@ -231,11 +232,12 @@ func main() {
 		if doGravity {
 			if cam.Height > h {
 				VelZ -= GForce
+				cam.Height += VelZ
+				redraw = true
 			} else {
 				VelZ = 0
 			}
-			cam.Height += VelZ
-			redraw = true
+
 		}
 		//Redraw things
 		var millis uint32

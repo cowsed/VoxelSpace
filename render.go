@@ -11,16 +11,16 @@ import (
 var Noise opensimplex.Noise = opensimplex.NewNormalized(1)
 
 func sampleHeight(x, y float64) float64 {
-	//h := HeightMap.GrayAt(int(x), int(y))
-	//return float64(h.Y) * float64(terrainScale)
+	h := HeightMap.GrayAt(int(x), int(y))
+	return float64(h.Y) * float64(terrainScale)
 	//return genHeight(x, y) * float64(terrainScale) //
-	return Noise.Eval2(x/100, y/100) * 255
+	//return Noise.Eval2(x/100, y/100) * 255
 }
 func sampleColor(x, y float64) sdl.Color {
-	//c := ColorMap.RGBAAt(FAbs(int(x), 120), FAbs(int(y), 120))
-	//return sdl.Color{R: c.R, G: c.G, B: c.B, A: c.A}
+	c := ColorMap.RGBAAt(FAbs(int(x), 120), FAbs(int(y), 120))
+	return sdl.Color{R: c.R, G: c.G, B: c.B, A: c.A}
 	//return genCol(x, y)
-	return sdl.Color{R: uint8(Noise.Eval2(x/100, y/100) * 255), A: 255}
+	//return sdl.Color{R: uint8(Noise.Eval2(x/100, y/100) * 255), A: 255}
 
 }
 
@@ -86,7 +86,11 @@ func DrawFrameChunk(startX, endX int, hiddeny []int, c Camera, screen_width, scr
 			samplePoint = Point{math.Floor(plx), math.Floor(ply)}
 			sampleH = sampleHeight(samplePoint.X, samplePoint.Y)
 			heightonscreen = (c.Height-sampleH)*invz + c.Horizon
-			DrawVerticalLine(i, int(heightonscreen), hiddeny[i-startX], sampleColor(samplePoint.X, samplePoint.Y), pixels, surface)
+			col := sampleColor(samplePoint.X, samplePoint.Y)
+			mix := 1 - z/c.Distance
+			mix = math.Pow(mix, FogAmt)
+			col = mixCol(col, SkyCol, mix)
+			DrawVerticalLine(i, int(heightonscreen), hiddeny[i-startX], col, pixels, surface)
 			if int(heightonscreen) < hiddeny[i-startX] {
 				hiddeny[i-startX] = int(heightonscreen)
 			}
