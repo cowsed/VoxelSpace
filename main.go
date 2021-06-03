@@ -47,8 +47,7 @@ var (
 //Physics Variables
 var (
 	VelZ     float64
-	InputVel Point //Velocity of camera
-
+	InputVel Point //Velocity of cameras
 )
 
 //Font Information
