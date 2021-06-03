@@ -12,7 +12,14 @@ var UIPosX int32
 var UIPosY int32
 var UISelected int
 
-var UIItems []UIItem = []UIItem{&BoolEdit{"DoGravity", &doGravity}, &FloatEdit{"GForce", &GForce}, &FloatEdit{"Speed", &SpeedModifier}, &IntEdit{"Player Height", &playerHeight}}
+var UIItems []UIItem = []UIItem{
+	&BoolEdit{"ShowDB", &drawDB},
+	&BoolEdit{"DoGravity", &doGravity},
+	&FloatEdit{"GForce", &GForce},
+	&FloatEdit{"Speed", &SpeedModifier},
+	&IntEdit{"Player Height", &playerHeight},
+	&FloatEdit{"Terrain Scale", &terrainScale},
+}
 
 func RenderUI(font *ttf.Font) {
 	UISurf.Free()

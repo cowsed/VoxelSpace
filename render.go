@@ -8,7 +8,7 @@ import (
 
 func sampleHeight(x, y float64) float64 {
 	h := HeightMap.GrayAt(int(x), int(y))
-	return float64(h.Y)
+	return float64(h.Y) * float64(terrainScale)
 }
 func sampleColor(x, y float64) sdl.Color {
 	c := ColorMap.RGBAAt(FAbs(int(x), 120), FAbs(int(y), 120))

@@ -21,8 +21,9 @@ const (
 
 //Window Information
 var (
-	WindowWidth  int = 800
-	WindowHeight int = 600
+	WindowWidth  int = 1920
+	WindowHeight int = 1080
+	captureMouse     = false
 )
 
 //Rendering Information
@@ -30,11 +31,12 @@ var (
 	redraw      = true //Something changed and should redraw
 	frameCount  = 0    //Number of frames rendered
 	totalMillis int    //Number of milliseconds used by rendering
+	drawDB      = true
 )
 
 //Physics Information
 var (
-	speed                 = 4.0
+	speed         float64 = 4.0
 	SpeedModifier float64 = 1 //Speed Modifier
 	playerHeight          = 15
 	doGravity             = false
@@ -51,9 +53,10 @@ var fontColor = sdl.Color{R: 255, G: 0, B: 255, A: 255}
 
 //World Data
 var (
-	HeightMap *image.Gray
-	ColorMap  *image.RGBA
-	SkyCol    = sdl.Color{R: 155, G: 255, B: 255, A: 255}
+	terrainScale float64 = 1
+	HeightMap    *image.Gray
+	ColorMap     *image.RGBA
+	SkyCol       = sdl.Color{R: 155, G: 255, B: 255, A: 255}
 )
 
 //Multi Thread Rendering Information
@@ -80,7 +83,7 @@ func main() {
 		int32(WindowWidth), int32(WindowHeight), sdl.WINDOW_SHOWN)
 	check(err)
 	defer window.Destroy()
-
+	sdl.CaptureMouse(captureMouse)
 	//Initialize The Drawing Space
 	surface, err := window.GetSurface()
 	check(err)
@@ -153,6 +156,11 @@ func main() {
 						UIItems[UISelected].PreviousItem()
 					case sdl.K_RIGHT:
 						UIItems[UISelected].NextItem()
+					case sdl.K_ESCAPE:
+						captureMouse = !captureMouse
+						sdl.CaptureMouse(captureMouse)
+						//window.SetGrab(captureMouse)
+						sdl.SetRelativeMouseMode(captureMouse)
 					}
 				} else if e.State == sdl.RELEASED {
 					delete(keyMap, keyCode)
@@ -174,9 +182,9 @@ func main() {
 				InputVel.Y = -1
 			case "s":
 				InputVel.Y = 1
-			case "q":
+			case "a":
 				InputVel.X = -1
-			case "e":
+			case "d":
 				InputVel.X = 1
 			case "z":
 				cam.Height += 3
@@ -187,9 +195,9 @@ func main() {
 			case "f":
 				cam.Horizon -= 4
 
-			case "a":
+			case "q":
 				cam.Angle -= 0.02
-			case "d":
+			case "e":
 				cam.Angle += 0.02
 			case "u":
 				runtime.ReadMemStats(&gcStats)
@@ -198,6 +206,16 @@ func main() {
 			}
 
 		}
+		//Handle Mouse
+
+		deltaX, deltaY, _ := sdl.GetRelativeMouseState()
+
+		cam.Angle += float64(deltaX) * .005
+		cam.Horizon -= float64(deltaY) * 2
+		if deltaX > 0 || deltaY > 0 {
+			redraw = true
+		}
+		//sdl.WarpMouseGlobal(newMouseX%int32(WindowWidth), newMouseY%int32(WindowHeight))
 
 		//Do Physics
 		InputVel = InputVel.Rot(cam.Angle)
@@ -246,9 +264,10 @@ func main() {
 		}
 
 		// Draw DB text
-		frameData := fmt.Sprintf("Frames: %d\n Delta %d\nAvgDelta: %d\n Modifier: %.3f\n%v \nMem: %vkb, NumGC: %d\n%v", frameCount, millis, totalMillis/frameCount, SpeedModifier, cam, gcStats.Alloc/1000, gcStats.NumGC, keyMap)
-		DrawTextBoxToSurface(frameData, 0, 0, 300, fontColor, font, text, surface)
-
+		if drawDB {
+			frameData := fmt.Sprintf("Frames: %d\n Delta %d\nAvgDelta: %d\n Modifier: %.3f\n%v \nMem: %vkb, NumGC: %d\n%v", frameCount, millis, totalMillis/frameCount, SpeedModifier, cam, gcStats.Alloc/1000, gcStats.NumGC, keyMap)
+			DrawTextBoxToSurface(frameData, 0, 0, 300, fontColor, font, text, surface)
+		}
 		ShowUI(surface)
 		//Update frame
 		window.UpdateSurface()
