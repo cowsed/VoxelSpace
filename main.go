@@ -34,7 +34,11 @@ var (
 
 //Physics Information
 var (
-	speed = 4.0
+	speed                 = 4.0
+	SpeedModifier float64 = 1 //Speed Modifier
+	playerHeight          = 15
+	doGravity             = false
+	GForce                = 0.04
 )
 
 //Font Information
@@ -49,7 +53,7 @@ var fontColor = sdl.Color{R: 255, G: 0, B: 255, A: 255}
 var (
 	HeightMap *image.Gray
 	ColorMap  *image.RGBA
-	SkyCol    = sdl.Color{R: 155, G: 0, B: 255, A: 255}
+	SkyCol    = sdl.Color{R: 155, G: 255, B: 255, A: 255}
 )
 
 //Multi Thread Rendering Information
@@ -96,6 +100,9 @@ func main() {
 	var text *sdl.Surface
 	defer text.Free()
 
+	defer UISurf.Free()
+
+	RenderUI(font)
 	window.UpdateSurface()
 
 	running := true
@@ -109,10 +116,10 @@ func main() {
 		Height:   100,
 		Horizon:  50,
 	}
-	var SpeedModifier float64 = 1       //Speed Modifier
 	var keyMap = map[sdl.Keycode]bool{} //Map of keys and if theyre pressed
-	var vel Point                       //Velocity of camera
-
+	var InputVel Point                  //Velocity of camera
+	//var Vel Point
+	var VelZ float64
 	renderControls = make([]chan RenderStuff, NumThreads) //sends reference to pixels to fill
 	for i := range renderControls {
 		renderControls[i] = make(chan RenderStuff)
@@ -133,6 +140,20 @@ func main() {
 				keyCode := e.Keysym.Sym
 				if e.State == sdl.PRESSED {
 					keyMap[keyCode] = true
+					switch keyCode {
+					case sdl.K_UP:
+						if UISelected > 0 {
+							UISelected--
+						}
+					case sdl.K_DOWN:
+						if UISelected < len(UIItems)-1 {
+							UISelected++
+						}
+					case sdl.K_LEFT:
+						UIItems[UISelected].PreviousItem()
+					case sdl.K_RIGHT:
+						UIItems[UISelected].NextItem()
+					}
 				} else if e.State == sdl.RELEASED {
 					delete(keyMap, keyCode)
 				}
@@ -140,22 +161,23 @@ func main() {
 
 		}
 		//Handle Keys
+		InputVel = Point{0, 0}
+
 		for k, down := range keyMap {
 			redraw = true
 			if !down {
 				continue
 			}
-			vel = Point{0, 0}
 
 			switch string(k) {
 			case "w":
-				vel.Y = -1
+				InputVel.Y = -1
 			case "s":
-				vel.Y = 1
+				InputVel.Y = 1
 			case "q":
-				vel.X = -1
+				InputVel.X = -1
 			case "e":
-				vel.X = 1
+				InputVel.X = 1
 			case "z":
 				cam.Height += 3
 			case "x":
@@ -173,27 +195,33 @@ func main() {
 				runtime.ReadMemStats(&gcStats)
 			case "g":
 				runtime.GC()
-			case "v":
-				SpeedModifier += 0.05
-			case "c":
-				SpeedModifier -= 0.05
 			}
 
-			//Do Physics
-			vel = vel.Rot(cam.Angle)
-			vel = vel.Mul(speed * SpeedModifier)
-			cam.Pos = cam.Pos.Add(vel)
-
-			//Min Height
-			cam.Height = max(cam.Height, sampleHeight(cam.Pos.X, cam.Pos.Y)+15)
 		}
 
+		//Do Physics
+		InputVel = InputVel.Rot(cam.Angle)
+		InputVel = InputVel.Mul(speed * SpeedModifier)
+		cam.Pos = cam.Pos.Add(InputVel)
+
+		//Min Height
+		h := sampleHeight(cam.Pos.X, cam.Pos.Y) + float64(playerHeight)
+		cam.Height = max(cam.Height, h)
+		if doGravity {
+			if cam.Height > h {
+				VelZ -= GForce
+			} else {
+				VelZ = 0
+			}
+			cam.Height += VelZ
+			redraw = true
+		}
 		//Redraw things
 		var millis uint32
 		if redraw {
 			frameCount++
 			//Clear Screen
-			surface.FillRect(&sdl.Rect{X: 0, Y: 0, W: int32(WindowWidth), H: int32(WindowHeight)}, SkyCol.Uint32())
+			//surface.FillRect(&sdl.Rect{X: 0, Y: 0, W: int32(WindowWidth), H: int32(WindowHeight)}, 0xffffff)
 
 			//Send Rendering Information
 			pixels := surface.Pixels()
@@ -212,6 +240,7 @@ func main() {
 			millis = sdl.GetTicks() - lastFrameTime
 			totalMillis += int(millis)
 
+			RenderUI(font)
 			redraw = false
 
 		}
@@ -220,7 +249,8 @@ func main() {
 		frameData := fmt.Sprintf("Frames: %d\n Delta %d\nAvgDelta: %d\n Modifier: %.3f\n%v \nMem: %vkb, NumGC: %d\n%v", frameCount, millis, totalMillis/frameCount, SpeedModifier, cam, gcStats.Alloc/1000, gcStats.NumGC, keyMap)
 		DrawTextBoxToSurface(frameData, 0, 0, 300, fontColor, font, text, surface)
 
-		//Fubusg frame
+		ShowUI(surface)
+		//Update frame
 		window.UpdateSurface()
 		surface.Free()
 
@@ -278,6 +308,11 @@ func DrawFrameChunk(startX, endX int, hiddeny []int, c Camera, screen_width, scr
 			ply += dy
 		}
 		deltaz += 0.005
+	}
+	//Fill the rest of the screen with skycol
+	for i := 0; i < len(hiddeny); i++ {
+		start := hiddeny[i]
+		DrawVerticalLine(i+startX, 0, start, SkyCol, pixels, surface)
 	}
 }
 
